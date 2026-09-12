@@ -127,307 +127,117 @@ export const UI_CUES = {
   enchant: 'ui_craft_enchanting',
 } as const;
 
-type UiCue =
-  | Exclude<(typeof UI_CUES)[keyof typeof UI_CUES], readonly string[] | Record<string, string>>
-  | (typeof UI_CUES.fiestaWords)[number]
-  | (typeof UI_CUES.gatherByNodeType)[keyof typeof UI_CUES.gatherByNodeType]
-  | (typeof UI_CUES.gatherCastByNodeType)[keyof typeof UI_CUES.gatherCastByNodeType]
-  | (typeof UI_CUES.gatherRareTier)[keyof typeof UI_CUES.gatherRareTier]
-  | (typeof UI_CUES.craftByFamily)[keyof typeof UI_CUES.craftByFamily];
+type DeepValues<T> = T extends string ? T : T extends readonly (infer U)[] ? U : T extends Record<string, infer V> ? DeepValues<V> : never;
+
+type UiCue = DeepValues<typeof UI_CUES>;
+
+type PlayOpts = {
+    cooldown?: number;
+    rate?: number;
+    gain?: number;
+    feedback?: boolean;
+};
 
 export class GameAudio {
-  private vol = 1;
-  // Gates the discrete interface/feedback cues (loot, level, quest, whisper, error,
-  // ...) plus the combat avoid cues the HUD reads via `feedbackEnabled`. On by
-  // default; driven by the `interfaceSfx` setting. World/spatial sounds and the
-  // gameplay-timing cues (ready check, duel countdown) are unaffected.
-  private feedbackOn = true;
+    private vol = 1;
+    private feedbackOn = true;
 
-  /** Set SFX volume (0..1). Safe before init(). */
-  setVolume(value: number): void {
-    this.vol = Math.min(1, Math.max(0, value));
-    sfx.setVolume(this.vol);
-  }
+    setVolume(value: number): void {
+        this.vol = Math.min(1, Math.max(0, value));
+        sfx.setVolume(this.vol);
+    }
 
-  get volume(): number {
-    return this.vol;
-  }
+    get volume(): number {
+        return this.vol;
+    }
 
-  /** Enable/disable the interface and feedback cues (the `interfaceSfx` setting).
-   *  On by default; when off, the notification "beeps" fall silent while the SFX
-   *  volume slider and the spatial world sounds are untouched. Safe before init(). */
-  setFeedbackEnabled(value: boolean): void {
-    this.feedbackOn = value;
-  }
+    setFeedbackEnabled(value: boolean): void {
+        this.feedbackOn = value;
+    }
 
-  /** Whether the interface/feedback cues are on. The HUD reads this to gate the
-   *  combat avoid cues (miss/dodge/parry) it plays through the spatial engine. */
-  get feedbackEnabled(): boolean {
-    return this.feedbackOn;
-  }
+    get feedbackEnabled(): boolean {
+        return this.feedbackOn;
+    }
 
-  /** Initialize sampled playback. Safe to call repeatedly after a user gesture. */
-  init(): void {
-    sfx.setVolume(this.vol);
-    sfx.init();
-  }
+    init(): void {
+        sfx.setVolume(this.vol);
+        sfx.init();
+    }
 
-  private play(key: UiCue, opts?: { cooldown?: number; rate?: number; gain?: number }): void {
-    sfx.playUi(key, {
-      jitter: false,
-      cooldown: opts?.cooldown,
-      rate: opts?.rate,
-      gain: opts?.gain,
-    });
-  }
+    private play(key: UiCue, opts: PlayOpts = {}): void {
+        if (opts.feedback && !this.feedbackOn) return;
+        sfx.playUi(key, { jitter: false, cooldown: opts.cooldown, rate: opts.rate, gain: opts.gain });
+    }
 
-  /** Play a cue only when interface/feedback sounds are enabled. The notification
-   *  cues (loot, level, quest, whisper, error, polymorph, death) route through here;
-   *  the gameplay-timing cues (ready check, duel countdown) call `play` directly. */
-  private playFeedback(key: UiCue, opts?: { cooldown?: number }): void {
-    if (this.feedbackOn) this.play(key, opts);
-  }
+    private playLayered(layers: Array<{ key: UiCue; rate?: number; gain?: number }>, opts: PlayOpts = {}): void {
+        for (const layer of layers) {
+            this.play(layer.key, { ...opts, rate: layer.rate, gain: layer.gain });
+        }
+    }
 
-  bagOpen(): void {
-    this.play(UI_CUES.bagOpen);
-  }
+    bagOpen(): void { this.play(UI_CUES.bagOpen); }
+    bagClose(): void { this.play(UI_CUES.bagClose); }
+    click(): void { this.play(UI_CUES.click); }
+    coin(): void { this.play(UI_CUES.coin, { feedback: true }); }
+    levelUp(): void { this.play(UI_CUES.levelUp, { feedback: true }); }
+    achievement(): void { this.play(UI_CUES.achievement); }
+    cosmeticUnlock(): void { this.play(UI_CUES.cosmeticUnlock); }
+    playerDeath(cue: typeof UI_CUES.playerDeath | typeof UI_CUES.playerDeathFemale = UI_CUES.playerDeath): void { this.play(cue); }
+    lootItem(): void { this.play(UI_CUES.lootItem, { feedback: true }); }
+    questDone(): void { this.play(UI_CUES.questDone, { feedback: true }); }
+    readyCheck(): void { this.play(UI_CUES.readyCheck); }
+    weaponSheathe(): void { this.play(UI_CUES.weaponSheathe); }
+    weaponUnsheathe(): void { this.play(UI_CUES.weaponUnsheathe); }
+    whisper(): void { this.play(UI_CUES.whisper, { feedback: true }); }
+    sheep(): void { this.play(UI_CUES.sheep, { feedback: true }); }
+    death(): void { this.play(UI_CUES.death, { feedback: true }); }
+    arenaLoss(): void { this.play(UI_CUES.arenaLoss, { feedback: true }); }
+    error(): void { this.play(UI_CUES.error, { feedback: true, cooldown: ERROR_SFX_COOLDOWN_SECONDS }); }
+    duelChallenge(): void { this.play(UI_CUES.duelChallenge); }
+    invitePrompt(): void { this.play(UI_CUES.duelChallenge, { feedback: true }); }
+    partyInvite(): void { this.play(UI_CUES.questReady, { feedback: true }); }
+    duelCountdownTick(): void { this.play(UI_CUES.duelCountdown); }
+    duelStart(): void { this.play(UI_CUES.duelStart); }
+    duelEnd(): void { this.play(UI_CUES.duelEnd); }
 
-  bagClose(): void {
-    this.play(UI_CUES.bagClose);
-  }
+    fiestaWord(tier = 0): void {
+        const index = Math.max(0, Math.min(3, Math.floor(Number.isFinite(tier) ? tier : 0)));
+        this.play(UI_CUES.fiestaWords[index]);
+    }
 
-  click(): void {
-    this.play(UI_CUES.click);
-  }
+    fiestaScorePing(mine: boolean): void { this.play(mine ? UI_CUES.fiestaScoreMine : UI_CUES.fiestaScoreOther); }
+    fiestaWave(): void { this.play(UI_CUES.fiestaWave); }
+    fiestaAugment(): void { this.play(UI_CUES.fiestaAugment); }
+    fiestaDown(): void { this.play(UI_CUES.fiestaDown); }
+    fiestaRevive(): void { this.play(UI_CUES.fiestaRevive); }
+    bgFlagTaken(): void { this.playLayered([{ key: UI_CUES.duelChallenge, rate: 0.58 }, { key: UI_CUES.duelChallenge, rate: 0.87, gain: 0.7 }, { key: UI_CUES.duelStart, gain: 0.85 }]); }
+    bgCapture(): void { this.playLayered([{ key: UI_CUES.achievement }, { key: UI_CUES.duelStart }]); }
+    cardPlay(): void { this.play(UI_CUES.cardPlay); }
+    cardReveal(): void { this.play(UI_CUES.cardReveal); }
+    cardRoundPush(): void { this.play(UI_CUES.cardRoundPush); }
+    cardShuffle(): void { this.play(UI_CUES.cardShuffle); }
 
-  coin(): void {
-    this.playFeedback(UI_CUES.coin);
-  }
+    gatherCast(nodeType?: GatherNodeType): void {
+        const key = nodeType ? UI_CUES.gatherCastByNodeType[nodeType] : UI_CUES.gatherCast;
+        this.play(key, { feedback: true });
+    }
 
-  levelUp(): void {
-    this.playFeedback(UI_CUES.levelUp);
-  }
+    fishCast(): void { this.play(UI_CUES.fishCast, { feedback: true }); }
+    fishBite(): void { this.play(UI_CUES.fishBite); }
+    fishReel(): void { this.play(UI_CUES.fishReel, { feedback: true }); }
+    gather(nodeType: GatherNodeType): void { this.play(UI_CUES.gatherByNodeType[nodeType], { feedback: true }); }
+    gatherRareTier(tier: 'rare' | 'epic' | 'legendary'): void { this.play(UI_CUES.gatherRareTier[tier], { feedback: true }); }
+    craftCast(): void { this.play(UI_CUES.craftCast, { feedback: true }); }
 
-  achievement(): void {
-    this.play(UI_CUES.achievement);
-  }
+    craftSuccess(recipeFamily: string): void {
+        const key = (UI_CUES.craftByFamily as Record<string, string>)[recipeFamily] ?? UI_CUES.lootItem;
+        this.play(key as UiCue, { feedback: true });
+    }
 
-  cosmeticUnlock(): void {
-    this.play(UI_CUES.cosmeticUnlock);
-  }
-
-  // Your OWN character actually dying (the 'playerDeath' sim event), not a
-  // minigame/PvP loss chime (fiesta, Yumi, arena rating, Vale Cup all still
-  // use death() below): plays the real custom death vocalization instead of
-  // the generic UI stinger.
-  //
-  // The gendered cue is RESOLVED BY THE CALLER (hud.ts, via playerVoiceCue)
-  // rather than here: picking it needs the player's authored appearance, and
-  // this module is a host-agnostic cue facade with no entity access. Defaults
-  // to the male take so every existing caller keeps its current behavior.
-  playerDeath(
-    cue: typeof UI_CUES.playerDeath | typeof UI_CUES.playerDeathFemale = UI_CUES.playerDeath,
-  ): void {
-    this.play(cue);
-  }
-
-  lootItem(): void {
-    this.playFeedback(UI_CUES.lootItem);
-  }
-
-  questDone(): void {
-    this.playFeedback(UI_CUES.questDone);
-  }
-
-  readyCheck(): void {
-    this.play(UI_CUES.readyCheck);
-  }
-
-  weaponSheathe(): void {
-    this.play(UI_CUES.weaponSheathe);
-  }
-
-  weaponUnsheathe(): void {
-    this.play(UI_CUES.weaponUnsheathe);
-  }
-
-  whisper(): void {
-    this.playFeedback(UI_CUES.whisper);
-  }
-
-  sheep(): void {
-    this.playFeedback(UI_CUES.sheep);
-  }
-
-  death(): void {
-    this.playFeedback(UI_CUES.death);
-  }
-
-  arenaLoss(): void {
-    this.playFeedback(UI_CUES.arenaLoss);
-  }
-
-  error(): void {
-    this.playFeedback(UI_CUES.error, { cooldown: ERROR_SFX_COOLDOWN_SECONDS });
-  }
-
-  duelChallenge(): void {
-    this.play(UI_CUES.duelChallenge);
-  }
-
-  // Same ui_duel_challenge cue as a real duel/arena/Vale Cup challenge, but
-  // gated: party invite, guild invite, and a resurrection offer are not
-  // time-critical the way an actual match challenge is, and questAccept()
-  // (which they used before it was retired) always respected the Interface &
-  // Feedback Sounds toggle. Losing that gating was an unintended side effect
-  // of consolidating onto duelChallenge(), not a deliberate change.
-  invitePrompt(): void {
-    this.playFeedback(UI_CUES.duelChallenge);
-  }
-
-  // Party/group invite gets its own cue, distinct from the shared duelChallenge
-  // invitePrompt() above (resurrectionOffer still uses that one unchanged) and
-  // from guildInvite's own levelUp cue. Feedback-gated the same way: not
-  // time-critical, respects the Interface & Feedback Sounds toggle.
-  partyInvite(): void {
-    this.playFeedback(UI_CUES.questReady);
-  }
-
-  duelCountdownTick(): void {
-    this.play(UI_CUES.duelCountdown);
-  }
-
-  duelStart(): void {
-    this.play(UI_CUES.duelStart);
-  }
-
-  duelEnd(): void {
-    this.play(UI_CUES.duelEnd);
-  }
-
-  fiestaWord(tier = 0): void {
-    const index = Math.max(0, Math.min(3, Math.floor(Number.isFinite(tier) ? tier : 0)));
-    this.play(UI_CUES.fiestaWords[index]);
-  }
-
-  fiestaScorePing(mine: boolean): void {
-    this.play(mine ? UI_CUES.fiestaScoreMine : UI_CUES.fiestaScoreOther);
-  }
-
-  fiestaWave(): void {
-    this.play(UI_CUES.fiestaWave);
-  }
-
-  fiestaAugment(): void {
-    this.play(UI_CUES.fiestaAugment);
-  }
-
-  fiestaDown(): void {
-    this.play(UI_CUES.fiestaDown);
-  }
-
-  fiestaRevive(): void {
-    this.play(UI_CUES.fiestaRevive);
-  }
-
-  // Thornhollow Fields flag moments want WEIGHT. No dedicated recordings yet (the SFX
-  // asset flow is a follow-up), so each layers two existing cues into one
-  // bigger hit: a WAR-HORN stack for a take (the challenge horn doubled with
-  // a deep detuned layer carrying the weight and the fight-starts hit on the
-  // front edge; the old down-sting layer read as a boop, owner note), and the
-  // fanfare over the fight-starts hit for a capture.
-  bgFlagTaken(): void {
-    this.play(UI_CUES.duelChallenge, { rate: 0.58 });
-    this.play(UI_CUES.duelChallenge, { rate: 0.87, gain: 0.7 });
-    this.play(UI_CUES.duelStart, { gain: 0.85 });
-  }
-
-  bgCapture(): void {
-    this.play(UI_CUES.achievement);
-    this.play(UI_CUES.duelStart);
-  }
-
-  // Card Duel: live in-match feedback, same ungated category as the Fiesta
-  // cues above (match win/lose reuse duelEnd()/arenaLoss() directly, no
-  // dedicated methods needed for those).
-  cardPlay(): void {
-    this.play(UI_CUES.cardPlay);
-  }
-
-  cardReveal(): void {
-    this.play(UI_CUES.cardReveal);
-  }
-
-  cardRoundPush(): void {
-    this.play(UI_CUES.cardRoundPush);
-  }
-
-  cardShuffle(): void {
-    this.play(UI_CUES.cardShuffle);
-  }
-
-  // Gathering rhythm (Professions 2.0 Phase 12b). All of these are personal
-  // feedback notifications EXCEPT fishBite: the bite opens the live reel
-  // window, so it is a gameplay-timing cue (the ready-check/duel-countdown
-  // category) and deliberately ignores the Interface & Feedback toggle.
-  gatherCast(nodeType?: GatherNodeType): void {
-    this.playFeedback(nodeType ? UI_CUES.gatherCastByNodeType[nodeType] : UI_CUES.gatherCast);
-  }
-
-  fishCast(): void {
-    this.playFeedback(UI_CUES.fishCast);
-  }
-
-  fishBite(): void {
-    this.play(UI_CUES.fishBite);
-  }
-
-  fishReel(): void {
-    this.playFeedback(UI_CUES.fishReel);
-  }
-
-  gather(nodeType: GatherNodeType): void {
-    this.playFeedback(UI_CUES.gatherByNodeType[nodeType]);
-  }
-
-  // Layers alongside gather's own node-type cue above, never a replacement
-  // for it: a rare-or-better material roll (or a rare-event roll) gets an
-  // additional tiered stinger on top of the plain impact.
-  gatherRareTier(tier: 'rare' | 'epic' | 'legendary'): void {
-    this.playFeedback(UI_CUES.gatherRareTier[tier]);
-  }
-
-  // Craft-family cast start (craft / disenchant / apply-enchant / salvage /
-  // tool recharge). Feedback-gated like gatherCast; completion uses the
-  // family-specific cues below.
-  craftCast(): void {
-    this.playFeedback(UI_CUES.craftCast);
-  }
-
-  // recipeFamily is the recipe's professionId (a CRAFT_RING id); an unknown
-  // id (should never happen, every recipe's professionId is one of the ten)
-  // falls back to the generic loot ding rather than throwing.
-  craftSuccess(recipeFamily: string): void {
-    const key = (UI_CUES.craftByFamily as Record<string, string>)[recipeFamily];
-    this.playFeedback((key ?? UI_CUES.lootItem) as UiCue);
-  }
-
-  // Layers alongside craftSuccess's own cue, never a replacement for it.
-  masterwork(): void {
-    this.playFeedback(UI_CUES.masterwork);
-  }
-
-  disenchant(): void {
-    this.playFeedback(UI_CUES.disenchant);
-  }
-
-  salvage(): void {
-    this.playFeedback(UI_CUES.salvage);
-  }
-
-  enchant(): void {
-    this.playFeedback(UI_CUES.enchant);
-  }
+    masterwork(): void { this.play(UI_CUES.masterwork, { feedback: true }); }
+    disenchant(): void { this.play(UI_CUES.disenchant, { feedback: true }); }
+    salvage(): void { this.play(UI_CUES.salvage, { feedback: true }); }
+    enchant(): void { this.play(UI_CUES.enchant, { feedback: true }); }
 }
 
 export const audio = new GameAudio();
